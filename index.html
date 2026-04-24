@@ -1029,5 +1029,29 @@ function downloadCSV() {
   URL.revokeObjectURL(url);
 }
 </script>
+  </script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCFAYai1Jj7xLcJeH8asKt3k_68i3_BS2w",
+  authDomain: "exam-marker-19d3e.firebaseapp.com",
+  projectId: "exam-marker-19d3e",
+  storageBucket: "exam-marker-19d3e.firebasestorage.app",
+  messagingSenderId: "738431059625",
+  appId: "1:738431059625:web:10450d0aea2be2e6558bb8"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+window.db = db;
+
+console.log("Firebase Connected");
+</script>
+
+</body>
+</html>
 </body>
 </html>
