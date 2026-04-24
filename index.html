@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExamMark — Offline Answer Marking</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e11;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a34;
+    --border2: #38384a;
+    --text: #e8e6f0;
+    --muted: #6b6b80;
+    --accent: #c8f060;
+    --accent2: #a8d040;
+    --gold: #f0c060;
+    --red: #f06060;
+    --green: #60d090;
+    --blue: #60a8f0;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(14,14,17,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+
+  .logo {
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-dot { color: var(--accent); }
+
+  .steps-nav {
+    display: flex;
+    gap: 0;
+    align-items: center;
+  }
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 20px;
+    height: 56px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    cursor: default;
+    user-select: none;
+  }
+  .step-item.active { color: var(--text); border-bottom-color: var(--accent); }
+  .step-item.done { color: var(--accent); }
+  .step-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .step-item.done .step-num {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0e0e11;
+  }
+
+  /* ── MAIN ── */
+  .main { max-width: 820px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ── SCREEN ── */
+  .screen { display: none; animation: fadeUp 0.3s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── SECTION HEADER ── */
+  .section-head { margin-bottom: 36px; }
+  .section-head h1 {
+    font-family: var(--font-head);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+  .section-head p { font-size: 13px; color: var(--muted); }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 12px;
+    padding: 56px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag {
+    border-color: var(--accent);
+    background: rgba(200,240,96,0.03);
+  }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-icon {
+    width: 52px; height: 52px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 22px;
+  }
+  .upload-zone h3 { font-family: var(--font-head); font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .upload-zone p { font-size: 12px; color: var(--muted); }
+  .upload-badge {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 4px 12px;
+    border: 1px solid var(--border2);
+    border-radius: 99px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .file-preview {
+    display: none;
+    margin-top: 16px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    align-items: center;
+    gap: 12px;
+  }
+  .file-preview.show { display: flex; }
+  .file-icon { font-size: 20px; flex-shrink: 0; }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .file-clear {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 18px; padding: 4px;
+    line-height: 1; border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .file-clear:hover { color: var(--red); }
+
+  .col-hint {
+    margin-top: 24px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .col-hint-label { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .col-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .col-tag {
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    background: rgba(96,168,240,0.1);
+    border: 1px solid rgba(96,168,240,0.25);
+    color: var(--blue);
+  }
+
+  .msg {
+    display: none;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .msg.error { background: rgba(240,96,96,0.08); border: 1px solid rgba(240,96,96,0.25); color: var(--red); display: block; }
+  .msg.success { background: rgba(96,208,144,0.08); border: 1px solid rgba(96,208,144,0.25); color: var(--green); display: block; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 28px;
+    border: none; border-radius: 6px; cursor: pointer;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent); color: #0e0e11;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border2);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
+  .btn-dl {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border2);
+  }
+  .btn-dl:hover { border-color: var(--accent); color: var(--accent); }
+
+  .actions { margin-top: 32px; display: flex; gap: 12px; align-items: center; }
+
+  /* ── EXAM ── */
+  .exam-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 36px; padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .exam-progress-label { font-size: 12px; color: var(--muted); }
+  .progress-pill {
+    padding: 6px 14px;
+    border-radius: 99px;
+    border: 1px solid var(--border2);
+    font-size: 12px;
+  }
+  .progress-pill span { color: var(--accent); font-weight: 500; }
+
+  .subject-block { margin-bottom: 40px; }
+  .subject-label {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .subject-label::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    flex-shrink: 0;
+  }
+
+  .q-row {
+    display: flex; align-items: center; gap: 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(42,42,52,0.6);
+    transition: background 0.1s;
+  }
+  .q-row:hover { background: rgba(255,255,255,0.01); }
+  .q-num {
+    font-size: 12px; color: var(--muted);
+    min-width: 44px;
+    flex-shrink: 0;
+  }
+  .q-options { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .opt-label {
+    position: relative;
+    cursor: pointer;
+  }
+  .opt-label input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
+  .opt-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 42px; height: 36px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .opt-label:hover .opt-btn { border-color: var(--accent); color: var(--accent); background: rgba(200,240,96,0.04); }
+  .opt-label input:checked ~ .opt-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0e0e11;
+    font-weight: 700;
+  }
+
+  /* ── RESULT ── */
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 40px;
+    background: var(--border);
+  }
+  .score-card {
+    background: var(--surface);
+    padding: 28px 20px;
+    text-align: center;
+  }
+  .score-val {
+    font-family: var(--font-head);
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .score-val.warn { color: var(--gold); }
+  .score-val.bad { color: var(--red); }
+  .score-lbl { font-size: 10px; color: var(--muted); letter-spacing: 0.18em; text-transform: uppercase; margin-top: 8px; }
+
+  /* result table */
+  .result-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { border-bottom: 1px solid var(--border); }
+  th {
+    text-align: left; padding: 12px 16px;
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); font-weight: 500; white-space: nowrap;
+    background: var(--surface);
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(42,42,52,0.5);
+    color: #a0a0b8;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.01); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px; border-radius: 99px;
+    font-size: 10px; letter-spacing: 0.08em;
+    font-weight: 500;
+  }
+  .badge-correct { background: rgba(96,208,144,0.1); color: var(--green); border: 1px solid rgba(96,208,144,0.2); }
+  .badge-wrong { background: rgba(240,96,96,0.1); color: var(--red); border: 1px solid rgba(240,96,96,0.2); }
+  .badge-skip { background: rgba(107,107,128,0.15); color: var(--muted); border: 1px solid var(--border2); }
+
+  .ans-correct { color: var(--green); font-weight: 500; }
+  .ans-wrong { color: var(--red); }
+  .ans-skip { color: var(--muted); }
+
+  /* ── LOADING OVERLAY ── */
+  #loadingOverlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(14,14,17,0.85);
+    backdrop-filter: blur(6px);
+    z-index: 999;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #loadingOverlay.show { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-txt { font-size: 12px; color: var(--muted); letter-spacing: 0.1em; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-txt">Parsing file…</div>
+</div>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="logo">Exam<span class="logo-dot">Mark</span></div>
+  <nav class="steps-nav">
+    <div class="step-item active" id="nav-upload">
+      <div class="step-num">1</div> Upload
+    </div>
+    <div class="step-item" id="nav-exam">
+      <div class="step-num">2</div> Exam
+    </div>
+    <div class="step-item" id="nav-result">
+      <div class="step-num">3</div> Results
+    </div>
+  </nav>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ── SCREEN 1: UPLOAD ── -->
+  <section class="screen active" id="screen-upload">
+    <div class="section-head">
+      <h1>Upload Answer Key</h1>
+      <p>Upload your Excel or CSV file to load the answer key and begin marking.</p>
+    </div>
+
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      <div class="upload-icon">📄</div>
+      <h3>Drop your file here</h3>
+      <p>or click anywhere in this box to browse</p>
+      <span class="upload-badge">.xlsx &nbsp;·&nbsp; .xls &nbsp;·&nbsp; .csv</span>
+    </div>
+
+    <div class="file-preview" id="filePreview">
+      <div class="file-icon">📊</div>
+      <div class="file-info">
+        <div class="file-name" id="previewName"></div>
+        <div class="file-meta" id="previewMeta"></div>
+      </div>
+      <button class="file-clear" id="clearBtn" title="Remove file">✕</button>
+    </div>
+
+    <div class="col-hint">
+      <div class="col-hint-label">Required columns in your file</div>
+      <div class="col-tags">
+        <span class="col-tag">Subject</span>
+        <span class="col-tag">Question No</span>
+        <span class="col-tag">Correct Answer</span>
+      </div>
+    </div>
+
+    <div class="msg" id="uploadMsg"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="startBtn" disabled onclick="startExam()">
+        Start Exam →
+      </button>
+    </div>
+  </section>
+
+  <!-- ── SCREEN 2: EXAM ── -->
+  <section class="screen" id="screen-exam">
+    <div class="exam-topbar">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.02em;margin-bottom:4px;">Answer Sheet</div>
+        <div class="exam-progress-label">Select one option per question</div>
+      </div>
+      <div class="progress-pill">
+        <span id="answeredCount">0</span> / <span id="totalCount">0</span> answered
+      </div>
+    </div>
+
+    <div id="examBody"></div>
+
+    <div class="actions" style="border-top:1px solid var(--border);padding-top:28px;margin-top:8px;">
+      <button class="btn btn-primary" onclick="submitExam()">Submit Exam →</button>
+      <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
+    </div>
+  </section>
+
+  <!-- ── SCREEN 3: RESULT ── -->
+  <section class="screen" id="screen-result">
+    <div class="section-head">
+      <h1>Exam Results</h1>
+    </div>
+
+    <div class="score-grid">
+      <div class="score-card">
+        <div class="score-val" id="resScore">—</div>
+        <div class="score-lbl">Score</div>
+      </div>
+      <div class="score-card">
+        <div class="score-val" id="resTotal" style="color:var(--text)">—</div>
+        <div class="score-lbl">Total Questions</div>
+      </div>
+      <div class="score-card">
+        <div class="score-val" id="resAccuracy">—</div>
+        <div class="score-lbl">Accuracy</div>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-bottom:28px;">
+      <button class="btn btn-dl" onclick="downloadCSV()">↓ Download CSV</button>
+      <button class="btn btn-ghost" onclick="goUpload()">Start Over</button>
+    </div>
+
+    <div class="result-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Subject</th>
+            <th>Question</th>
+            <th>Correct Answer</th>
+            <th>Your Answer</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+let answerKey = [];
+let studentAnswers = {};
+let evaluationResults = [];
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function formatSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'msg ' + type;
+}
+
+function hideMsg(el) { el.className = 'msg'; }
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+const SCREENS = ['upload','exam','result'];
+
+function goScreen(name) {
+  SCREENS.forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('active', s === name);
+    const nav = document.getElementById('nav-'+s);
+    const idx = SCREENS.indexOf(s);
+    const cur = SCREENS.indexOf(name);
+    nav.className = 'step-item' + (s === name ? ' active' : idx < cur ? ' done' : '');
+  });
+}
+
+function goUpload() {
+  answerKey = []; studentAnswers = {}; evaluationResults = [];
+  clearFileUI();
+  goScreen('upload');
+}
+
+// ── FILE UPLOAD ─────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const filePreview= document.getElementById('filePreview');
+const previewName= document.getElementById('previewName');
+const previewMeta= document.getElementById('previewMeta');
+const clearBtn   = document.getElementById('clearBtn');
+const startBtn   = document.getElementById('startBtn');
+const uploadMsg  = document.getElementById('uploadMsg');
+const loading    = document.getElementById('loadingOverlay');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+clearBtn.addEventListener('click', e => { e.stopPropagation(); clearFileUI(); });
+
+function clearFileUI() {
+  fileInput.value = '';
+  filePreview.classList.remove('show');
+  startBtn.disabled = true;
+  hideMsg(uploadMsg);
+  answerKey = [];
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['xlsx','xls','csv'].includes(ext)) {
+    showMsg(uploadMsg, '✕  Invalid file type. Please upload .xlsx, .xls, or .csv', 'error');
+    clearFileUI();
+    return;
+  }
+  hideMsg(uploadMsg);
+  previewName.textContent = file.name;
+  previewMeta.textContent = formatSize(file.size) + ' · ' + ext.toUpperCase();
+  filePreview.classList.add('show');
+  loading.classList.add('show');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const parsed = parseAnswerKey(json);
+      loading.classList.remove('show');
+      if (parsed.length === 0) {
+        showMsg(uploadMsg, '✕  No valid rows found. Check columns: Subject, Question No, Correct Answer', 'error');
+        clearFileUI();
+        return;
+      }
+      answerKey = parsed;
+      startBtn.disabled = false;
+      showMsg(uploadMsg, '✓  ' + parsed.length + ' questions loaded successfully', 'success');
+    } catch(err) {
+      loading.classList.remove('show');
+      showMsg(uploadMsg, '✕  Failed to parse file: ' + err.message, 'error');
+      clearFileUI();
+    }
+  };
+  reader.onerror = () => {
+    loading.classList.remove('show');
+    showMsg(uploadMsg, '✕  Could not read file.', 'error');
+  };
+  reader.readAsBinaryString(file);
+}
+
+// ── PARSER ─────────────────────────────────────────────────────────────────
+function parseAnswerKey(rows) {
+  const results = [], seen = new Set();
+  for (const row of rows) {
+    const subject = String(
+      row['Subject'] || row['subject'] || ''
+    ).trim();
+    const qno = String(
+      row['Question No'] || row['question no'] || row['QuestionNo'] || row['questionno'] || row['Question_No'] || ''
+    ).trim();
+    const ans = String(
+      row['Correct Answer'] || row['correct answer'] || row['CorrectAnswer'] || row['correctanswer'] || row['Correct_Answer'] || ''
+    ).trim().toUpperCase();
+    if (!qno || !ans || !['A','B','C','D'].includes(ans)) continue;
+    const key = subject + '||' + qno;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push({ subject, questionNo: qno, correctAnswer: ans });
+  }
+  return results;
+}
+
+// ── EXAM ───────────────────────────────────────────────────────────────────
+function startExam() {
+  studentAnswers = {};
+  buildExam();
+  goScreen('exam');
+}
+
+function buildExam() {
+  const body = document.getElementById('examBody');
+  const totalEl = document.getElementById('totalCount');
+  const answeredEl = document.getElementById('answeredCount');
+  totalEl.textContent = answerKey.length;
+  answeredEl.textContent = 0;
+  body.innerHTML = '';
+
+  // Group by subject
+  const groups = {};
+  answerKey.forEach(q => {
+    const s = q.subject || 'General';
+    if (!groups[s]) groups[s] = [];
+    groups[s].push(q);
+  });
+
+  Object.entries(groups).forEach(([subj, qs]) => {
+    const block = document.createElement('div');
+    block.className = 'subject-block';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'subject-label';
+    lbl.textContent = subj;
+    block.appendChild(lbl);
+
+    qs.forEach(q => {
+      const key = q.subject + '||' + q.questionNo;
+      const row = document.createElement('div');
+      row.className = 'q-row';
+
+      const num = document.createElement('div');
+      num.className = 'q-num';
+      num.textContent = 'Q' + q.questionNo;
+      row.appendChild(num);
+
+      const opts = document.createElement('div');
+      opts.className = 'q-options';
+
+      ['A','B','C','D'].forEach(opt => {
+        const label = document.createElement('label');
+        label.className = 'opt-label';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = key;
+        radio.value = opt;
+        radio.addEventListener('change', () => {
+          studentAnswers[key] = opt;
+          document.getElementById('answeredCount').textContent =
+            Object.keys(studentAnswers).filter(k => studentAnswers[k]).length;
+        });
+
+        const btn = document.createElement('div');
+        btn.className = 'opt-btn';
+        btn.textContent = opt;
+
+        label.appendChild(radio);
+        label.appendChild(btn);
+        opts.appendChild(label);
+      });
+
+      row.appendChild(opts);
+      block.appendChild(row);
+    });
+
+    body.appendChild(block);
+  });
+}
+
+function submitExam() {
+  const answered = Object.keys(studentAnswers).filter(k => studentAnswers[k]).length;
+  const total = answerKey.length;
+  if (answered < total) {
+    const ok = confirm(`You have ${total - answered} unanswered question(s).\n\nSubmit anyway?`);
+    if (!ok) return;
+  }
+  buildResults();
+  goScreen('result');
+}
+
+// ── EVALUATOR ──────────────────────────────────────────────────────────────
+function buildResults() {
+  evaluationResults = answerKey.map(q => {
+    const key = q.subject + '||' + q.questionNo;
+    const sa = (studentAnswers[key] || '').trim().toUpperCase();
+    const status = sa === '' ? 'Skipped' : sa === q.correctAnswer ? 'Correct' : 'Wrong';
+    return {
+      subject: q.subject,
+      questionNo: q.questionNo,
+      correctAnswer: q.correctAnswer,
+      studentAnswer: sa || '—',
+      status
+    };
+  });
+
+  const total = evaluationResults.length;
+  const score = evaluationResults.filter(r => r.status === 'Correct').length;
+  const accuracy = total > 0 ? ((score / total) * 100).toFixed(1) : '0.0';
+  const pct = parseFloat(accuracy);
+
+  const scoreEl = document.getElementById('resScore');
+  scoreEl.textContent = score;
+  scoreEl.className = 'score-val';
+
+  document.getElementById('resTotal').textContent = total;
+
+  const accEl = document.getElementById('resAccuracy');
+  accEl.textContent = accuracy + '%';
+  accEl.className = 'score-val' + (pct >= 75 ? '' : pct >= 50 ? ' warn' : ' bad');
+
+  // Build table
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = '';
+  evaluationResults.forEach((r, i) => {
+    const tr = document.createElement('tr');
+
+    const ansClass = r.status === 'Correct' ? 'ans-correct' : r.status === 'Wrong' ? 'ans-wrong' : 'ans-skip';
+    const badgeClass = r.status === 'Correct' ? 'badge-correct' : r.status === 'Wrong' ? 'badge-wrong' : 'badge-skip';
+
+    tr.innerHTML = `
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${r.subject || '—'}</td>
+      <td>Q${r.questionNo}</td>
+      <td class="ans-correct">${r.correctAnswer}</td>
+      <td class="${ansClass}">${r.studentAnswer}</td>
+      <td><span class="badge ${badgeClass}">${r.status}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── CSV EXPORT ─────────────────────────────────────────────────────────────
+function downloadCSV() {
+  const header = 'Subject,Question,Correct,Student,Status';
+  const rows = evaluationResults.map(r =>
+    [r.subject, 'Q'+r.questionNo, r.correctAnswer, r.studentAnswer, r.status]
+      .map(v => '"' + String(v).replace(/"/g, '""') + '"')
+      .join(',')
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'exam_results.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
